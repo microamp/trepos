@@ -17,6 +17,7 @@ ERR_MISSING_KWARG = "Required keyword argument missing: {0}"
 
 
 def elapsed(fn):
+    """Print out the number of seconds taken to complete a given task.."""
     def _elapsed(*args, **kwargs):
         started = time.time()
         r = fn(*args, **kwargs)
@@ -94,9 +95,11 @@ def fetch_repos(**kwargs):
              for lang in kwargs["langs"]
              for repo in fetch_lang_repos(lang, kwargs["period"])]
 
+    # filter out unstarred repos unless 'showall' is on
     filtered = (filter(lambda d: d["stars"], repos)
                 if not kwargs["showall"] else repos)
 
+    # repos with most stars first
     return sorted(filtered, key=lambda d: d["stars"], reverse=True)
 
 
