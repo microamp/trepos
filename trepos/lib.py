@@ -70,22 +70,35 @@ def extract_meta(repo):
     return repo_meta.extract()[0].split(u"•")
 
 
+def extract_body(url):
+    return requests.get(url).text
+
+
+def fetch_langs():
+    body = extract_body("{0}/trending".format(API_ENDPOINT))
+
+    classes = "select-menu-item-text js-select-button-text js-navigation-open"
+    path = '//a[@class="{0}"]/text()'.format(classes)
+
+    return [lang.extract().strip()
+            for lang in Selector(text=body).xpath(path)]
+
+
 def fetch_lang_repos(lang, period):
-    body = requests.get(build_url(l=lang, since=period)).text
+    def _build_dict(repo):
+        name = extract_name(repo)
+        desc = extract_desc(repo)
+        meta = extract_meta(repo)
 
-    repos = []
-    for repo in Selector(text=body).xpath('//li[@class="repo-list-item"]'):
-        repo_name = extract_name(repo)
-        repo_desc = extract_desc(repo)
-        repo_meta = extract_meta(repo)
+        return {"name": name,
+                "desc": desc,
+                "lang": meta[0].strip(),
+                "stars": (int(meta[1].strip().split(" ")[0])
+                          if len(meta) == 3 else 0)}
 
-        repos.append({"name": repo_name,
-                      "desc": repo_desc,
-                      "lang": repo_meta[0].strip(),
-                      "stars": (int(repo_meta[1].strip().split(" ")[0])
-                                if len(repo_meta) == 3 else 0)})
-
-    return repos
+    body = extract_body(build_url(l=lang, since=period))
+    return map(_build_dict,
+               Selector(text=body).xpath('//li[@class="repo-list-item"]'))
 
 
 @elapsed
@@ -104,13 +117,25 @@ def fetch_repos(**kwargs):
 
 
 if __name__ == "__main__":
-    from operator import eq
-    from pprint import pprint
+    # list all langs
+    langs = fetch_langs()
+    print("{0} languages found:".format(len(langs)))
+    print(", ".join(lang for lang in langs))
 
-    assert eq(build_url(lang="c", since=PERIOD_DAILY),
-              "https://github.com/trending?lang=c&since=daily")
+    assert build_url(l="c", since=PERIOD_DAILY) in (
+        "https://github.com/trending?l=c&since=daily",
+        "https://github.com/trending?since=daily&l=c",
+    )
 
-    repos = fetch_repos(langs=("sml", "ocaml", "haskell", "rust",),
+    # list top 10 repos belonging to either python or ruby
+    print("top 10 python/ruby repos:")
+    repos = fetch_repos(langs=("python", "ruby",),
                         period=PERIOD_DAILY,
-                        showall=False)
-    pprint(repos)
+                        showall=False)[:10]
+    for repo in repos:
+        print("[{lang}] [{stars}] {name} - {desc}".format(
+            lang=repo["lang"],
+            name=repo["name"],
+            stars=repo["stars"],
+            desc=repo["desc"],
+        ))

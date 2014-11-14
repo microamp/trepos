@@ -20,21 +20,17 @@ from .lib import VALID_PERIODS, PERIOD_DAILY, fetch_repos
 
 
 @click.command()
-# @click.option("--config", "-c",
-#               # type=click.Path,
-#               default=None,
-#               help="Path to your config file")
 @click.option("--lang", "-l",
               multiple=True,
               help="Language(s) to filter")
 @click.option("--period", "-p",
               type=click.Choice(VALID_PERIODS),
               default=PERIOD_DAILY,
-              help="daily/weekly/monthly (default: weekly)")
+              help="daily/weekly/monthly (default: daily)")
 @click.option("--showall", "-s",
               type=bool,
               default=False,
-              help="To include/exclude non-starred repos (default: no)")
+              help="Flag to include non-starred repos (default: no)")
 def main(lang, period, showall):
     repos = fetch_repos(langs=lang,
                         period=PERIOD_DAILY,
