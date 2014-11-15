@@ -42,7 +42,7 @@ def validate(fn):
 
 def build_url(**kwargs):
     def _build_args(**kwargs):
-        return "&".join("{0}={1}".format(k, v) for k, v in kwargs.items())
+        return "&".join("{0}={1}".format(k, v) for k, v in kwargs.iteritems())
 
     return "{endpoint}?{args}".format(endpoint="%s/trending" % API_ENDPOINT,
                                       args=_build_args(**kwargs))
@@ -51,6 +51,9 @@ def build_url(**kwargs):
 def recur(obj, methods):
     return obj if not methods else recur(getattr(obj, methods[0])(),
                                          methods[1:])
+
+def merge_dicts(*ds):
+    return {k: v for d in ds for k, v in d.iteritems()}
 
 
 def extract_name(repo):
@@ -66,8 +69,27 @@ def extract_desc(repo):
 
 
 def extract_meta(repo):
+    def _intify(stars):
+        return int(stars.split(" stars ")[0].replace(",", ""))
+
     repo_meta = repo.xpath('.//p[@class="repo-list-meta"]/text()')
-    return repo_meta.extract()[0].split(u"•")
+    vals = repo_meta.extract()[0].split(u"•")
+
+    assert 1 <= len(vals) <= 3, "Invalid meta: {0}".format(" ".join(vals))
+
+    # build meta dict consisting of keys: lang, stars and built_by
+    lang, stars, built_by = None, None, None
+    if len(vals) == 3:
+        lang, stars, built_by = vals[0].strip(), _intify(vals[1]), vals[2]
+    elif len(vals) == 2:
+        if " stars " in vals[0]:
+            stars, built_by = _intify(vals[0]), vals[1]
+        else:
+            lang, built_by = vals[0].strip(), vals[1]
+    else:
+        built_by = vals[0]
+
+    return {"lang": lang, "stars": stars, "built_by": built_by}
 
 
 def extract_body(url):
@@ -84,7 +106,7 @@ def fetch_langs():
             for lang in Selector(text=body).xpath(path)]
 
 
-def fetch_lang_repos(lang, period):
+def fetch_lang_repos(since=PERIOD_DAILY, **kwargs):
     def _build_dict(repo):
         name = extract_name(repo)
         desc = extract_desc(repo)
@@ -92,11 +114,10 @@ def fetch_lang_repos(lang, period):
 
         return {"name": name,
                 "desc": desc,
-                "lang": meta[0].strip(),
-                "stars": (int(meta[1].strip().split(" ")[0])
-                          if len(meta) == 3 else 0)}
+                "lang": meta["lang"] or "",
+                "stars": meta["stars"] or 0}
 
-    body = extract_body(build_url(l=lang, since=period))
+    body = extract_body(build_url(**merge_dicts(kwargs, {"since": since})))
     return map(_build_dict,
                Selector(text=body).xpath('//li[@class="repo-list-item"]'))
 
@@ -106,7 +127,7 @@ def fetch_lang_repos(lang, period):
 def fetch_repos(**kwargs):
     repos = [repo
              for lang in kwargs["langs"]
-             for repo in fetch_lang_repos(lang, kwargs["period"])]
+             for repo in fetch_lang_repos(l=lang, since=kwargs["period"])]
 
     # filter out unstarred repos unless 'showall' is on
     filtered = (filter(lambda d: d["stars"], repos)
@@ -127,13 +148,28 @@ if __name__ == "__main__":
         "https://github.com/trending?since=daily&l=c",
     )
 
+    print("-" * 20)
+
+    # top 5 repos ()
+    print("top 5 repos this month:")
+    repos = fetch_lang_repos(since=PERIOD_MONTHLY)[:5]
+    for repo in repos:
+        print("[{lang}] *{stars}* {name} - {desc}".format(
+            lang=repo["lang"],
+            name=repo["name"],
+            stars=repo["stars"],
+            desc=repo["desc"],
+        ))
+
+    print("-" * 20)
+
     # list top 10 repos belonging to either python or ruby
-    print("top 10 python/ruby repos:")
+    print("top 10 python/ruby repos this week:")
     repos = fetch_repos(langs=("python", "ruby",),
-                        period=PERIOD_DAILY,
+                        period=PERIOD_WEEKLY,
                         showall=False)[:10]
     for repo in repos:
-        print("[{lang}] [{stars}] {name} - {desc}".format(
+        print("[{lang}] *{stars}* {name} - {desc}".format(
             lang=repo["lang"],
             name=repo["name"],
             stars=repo["stars"],
